@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>epubReader™</title>
+
+<!-- 🔧 PWA META TAGS (FIXED) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<!-- iOS/iPadOS Home Screen Icons -->
+<link rel="apple-touch-icon" sizes="180x180" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="120x120" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<!-- iOS: Prevent zoom on input focus -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+
+<style>
+body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#f4f4f4;
+    color:#222;
+    transition:.3s;
+    -webkit-tap-highlight-color: transparent;
+}
+header{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:center;
+    padding:10px;
+    background:white;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+button,label,select,input{
+    padding:8px 12px;
+    border:none;
+    border-radius:6px;
+    background:#2563eb;
+    color:white;
+    cursor:pointer;
+    font-size: 14px;
+}
+input[type="text"]{
+    background:white;
+    color:black;
+    min-width: 150px;
+}
+#fileInput{display:none;}
+#viewer{height:calc(100vh - 100px);}
+#progressBarContainer{height:4px;background:#ddd;}
+#progressBar{height:100%;width:0;background:#2563eb;transition:.2s;}
+#pageInfo{font-weight:600; align-self: center;}
+
+.panel{
+    position:fixed;
+    top:0;
+    left:-350px;
+    width:320px;
+    height:100%;
+    background:white;
+    box-shadow:0 0 20px rgba(0,0,0,0.3);
+    transition:left .3s;
+    z-index:1000;
+    display:flex;
+    flex-direction:column;
+}
+.panel.open{left:0;}
+.panelHeader{
+    padding:12px;
+    background:#2563eb;
+    color:white;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+.panelContent{
+    flex:1;
+    overflow:auto;
+    padding:10px;
+}
+.item{
+    padding:6px;
+    border-radius:6px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+.item span{
+    cursor:pointer;
+}
+.item:hover{background:#f0f0f0;}
+
+#searchResults{
+    position:fixed;
+    right:10px;
+    top:120px;
+    width:350px;
+    max-height:60vh;
+    overflow:auto;
+    background:white;
+    border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.3);
+    padding:10px;
+    display:none;
+    z-index:2000;
+}
+.searchHeader{
+    display:flex;
+    justify-content:space-between;
+    font-weight:bold;
+    margin-bottom:10px;
+}
+.resultItem{
+    padding:6px;
+    border-radius:6px;
+    cursor:pointer;
+}
+.resultItem:hover{background:#f0f0f0;}
+
+#popup{
+    position:fixed;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.3);
+    display:none;
+    max-width:500px;
+    z-index: 3000;
+}
+
+.darkUI{
+    background:#111;
+    color:#eee;
+}
+.darkUI header{background:#1c1c1c;}
+.darkUI .panel{background:#1c1c1c;color:#eee;}
+.darkUI .item:hover,
+.darkUI .resultItem:hover{background:#333;}
+.darkUI #searchResults{background:#1c1c1c;color:#eee;}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    header { padding: 8px; gap: 6px; }
+    button, label, select, input { padding: 6px 10px; font-size: 13px; }
+    #searchResults { width: calc(100% - 20px); right: 10px; top: 100px; }
+    .panel { width: 100%; left: -100%; }
+}
+</style>
+</head>
+<body>
+
+<header>
+<label for="fileInput">📚 Load EPUB</label>
+<input type="file" id="fileInput" accept=".epub">
+
+<button id="prev">◀ Prev</button>
+<button id="next">Next ▶</button>
+
+<button id="tocBtn">📑 TOC</button>
+
+<button id="addBookmarkBtn">🔖 Add</button>
+<button id="bookmarkPanelBtn">🔖 List</button>
+
+<button id="dictionaryBtn">📖 Dictionary</button>
+
+<button id="fontPlus">A+</button>
+<button id="fontMinus">A-</button>
+
+<select id="themeSelect">
+<option value="light">☀️ Light</option>
+<option value="dark">🌙 Dark</option>
+<option value="sepia">📜 Sepia</option>
+</select>
+
+<input type="text" id="searchInput" placeholder="🔍 Search...">
+<button id="searchBtn">Go</button>
+
+<span id="pageInfo"></span>
+</header>
+
+<div id="progressBarContainer"><div id="progressBar"></div></div>
+<div id="viewer"></div>
+
+<div id="tocPanel" class="panel">
+<div class="panelHeader">
+<span>📑 Table of Contents</span>
+<button onclick="togglePanel('tocPanel')">✕</button>
+</div>
+<div id="tocContent" class="panelContent"></div>
+</div>
+
+<div id="bookmarkPanel" class="panel">
+<div class="panelHeader">
+<span>🔖 Bookmarks</span>
+<button onclick="togglePanel('bookmarkPanel')">✕</button>
+</div>
+<div id="bookmarkContent" class="panelContent"></div>
+</div>
+
+<div id="searchResults"></div>
+<div id="popup"></div>
+
+<script>
+let book, rendition;
+let currentFont = 100;
+let selectedWord = "";
+let currentBookKey = "";
+
+// ---------- THEME HANDLING ----------
+let currentTheme = localStorage.getItem("epub-theme") || "light";
+
+function registerThemes() {
+    rendition.themes.register("light",  {"html, body": {background: "#fff", color: "#000"}});
+    rendition.themes.register("dark",   {"html, body": {background: "#111", color: "#eee"}});
+    rendition.themes.register("sepia",  {"html, body": {background: "#f4ecd8", color: "#5b4636"}});
+}
+
+function setTheme(theme) {
+    currentTheme = theme;
+    localStorage.setItem("epub-theme", theme);
+    document.body.classList.toggle("darkUI", theme === "dark");
+    document.getElementById("themeSelect").value = theme;
+    if (rendition) {
+        rendition.themes.select(theme);
+    }
+}
+
+function attachThemeHook() {
+    rendition.hooks.content.register((doc, data) => {
+        rendition.themes.select(currentTheme);
+    });
+}
+
+// ---------- LOAD EPUB ----------
+document.getElementById("fileInput").addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (rendition) { rendition.destroy(); }
+
+    book = ePub(file);
+    rendition = book.renderTo("viewer", { width: "100%", height: "100%" });
+
+    registerThemes();
+    attachThemeHook();
+    setTheme(currentTheme);
+
+    rendition.display();
+
+    buildTOC();
+    setupLocations();
+    enableSelection();
+
+    book.ready.then(() => {
+        const id = book.package.metadata.identifier || file.name;
+        currentBookKey = "epub-bookmarks-" + id;
+        updateBookmarkPanel();
+    });
+});
+
+// ---------- NAVIGATION ----------
+document.getElementById("prev").onclick = () => rendition && rendition.prev();
+document.getElementById("next").onclick = () => rendition && rendition.next();
+
+// ---------- FONT ----------
+document.getElementById("fontPlus").onclick = () => {
+    currentFont = Math.min(currentFont + 10, 200);
+    rendition.themes.fontSize(currentFont + "%");
+};
+document.getElementById("fontMinus").onclick = () => {
+    currentFont = Math.max(currentFont - 10, 80);
+    rendition.themes.fontSize(currentFont + "%");
+};
+
+// ---------- THEME SELECT ----------
+document.getElementById("themeSelect").onchange = e => setTheme(e.target.value);
+
+// ---------- PROGRESS ----------
+function setupLocations() {
+    book.ready.then(() => book.locations.generate(1600)).then(() => {
+        const total = book.locations.total;
+        rendition.on("relocated", loc => {
+            const current = book.locations.locationFromCfi(loc.start.cfi);
+            if (current && total) {
+                document.getElementById("pageInfo").textContent = `📄 ${current} / ${total}`;
+                document.getElementById("progressBar").style.width = ((current / total) * 100) + "%";
+            }
+        });
+    });
+}
+
+// ---------- TOC ----------
+function togglePanel(id) {
+    document.getElementById(id).classList.toggle("open");
+}
+document.getElementById("tocBtn").onclick = () => togglePanel("tocPanel");
+function buildTOC() {
+    book.loaded.navigation.then(nav => {
+        const toc = document.getElementById("tocContent");
+        toc.innerHTML = "";
+        nav.toc.forEach(ch => {
+            const div = document.createElement("div");
+            div.className = "item";
+            div.innerHTML = `<span>📖 ${ch.label}</span>`;
+            div.onclick = () => { rendition.display(ch.href); togglePanel("tocPanel"); };
+            toc.appendChild(div);
+        });
+    });
+}
+
+// ---------- SEARCH ----------
+document.getElementById("searchBtn").onclick = () => {
+    const q = document.getElementById("searchInput").value.trim();
+    if (!q) return;
+
+    const container = document.getElementById("searchResults");
+    container.innerHTML = `<div class="searchHeader">🔍 Results <button onclick="document.getElementById('searchResults').style.display='none'">✕</button></div><p>Searching...</p>`;
+    container.style.display = "block";
+
+    let results = [];
+    let spine = book.spine.spineItems;
+    let done = 0;
+
+    spine.forEach(item => {
+        item.load(book.load.bind(book)).then(() => {
+            try {
+                const doc = item.document;
+                const cfiBase = item.cfiBase;
+                const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+                    acceptNode: (node) => {
+                        if (node.textContent.toLowerCase().includes(q.toLowerCase()))
+                            return NodeFilter.FILTER_ACCEPT;
+                        return NodeFilter.FILTER_SKIP;
+                    }
+                });
+                const firstTextNode = walker.nextNode();
+                if (firstTextNode) {
+                    const text = firstTextNode.textContent;
+                    const index = text.toLowerCase().indexOf(q.toLowerCase());
+                    if (index !== -1) {
+                        const range = doc.createRange();
+                        range.setStart(firstTextNode, index);
+                        range.setEnd(firstTextNode, index + q.length);
+                        if (typeof ePub.CFI !== 'undefined' && ePub.CFI.fromRange) {
+                            const preciseCfi = ePub.CFI.fromRange(range, cfiBase);
+                            const start = Math.max(0, index - 40);
+                            const excerpt = text.substring(start, index + 40);
+                            results.push({ cfi: preciseCfi, excerpt });
+                        } else {
+                            const excerpt = text.substring(Math.max(0, index - 40), index + 40);
+                            results.push({ cfi: cfiBase, excerpt });
+                        }
+                    }
+                }
+            } catch (err) { /* ignore */ }
+            item.unload();
+            done++;
+            if (done === spine.length) renderSearchResults(results);
+        });
+    });
+};
+
+function renderSearchResults(results) {
+    const container = document.getElementById("searchResults");
+    container.innerHTML = `<div class="searchHeader">🔍 Results <button onclick="document.getElementById('searchResults').style.display='none'">✕</button></div>`;
+    if (results.length === 0) {
+        container.innerHTML += "<p>😕 No results found.</p>";
+        return;
+    }
+    results.forEach(r => {
+        const div = document.createElement("div");
+        div.className = "resultItem";
+        div.textContent = "… " + r.excerpt + " …";
+        div.onclick = () => {
+            rendition.display(r.cfi);
+            container.style.display = "none";
+        };
+        container.appendChild(div);
+    });
+}
+
+// ---------- DICTIONARY ----------
+function enableSelection() {
+    rendition.on("selected", (cfiRange, contents) => {
+        selectedWord = contents.window.getSelection().toString().trim();
+    });
+}
+document.getElementById("dictionaryBtn").onclick = () => {
+    if (!selectedWord) { alert("👆 Select a word first, then tap Dictionary."); return; }
+    const popup = document.getElementById("popup");
+    popup.style.display = "block";
+    popup.innerHTML = "🔎 Loading definition...";
+    fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + selectedWord)
+        .then(r => r.json())
+        .then(data => {
+            if (data.title) { 
+                popup.innerHTML = `❌ No definition found for "<b>${selectedWord}</b>".<br><br><button onclick='document.getElementById("popup").style.display="none"'>Close</button>`; 
+                return; 
+            }
+            const entry = data[0];
+            const meaning = entry.meanings?.[0];
+            const definition = meaning?.definitions?.[0]?.definition || "No definition available.";
+            popup.innerHTML = `<b>📖 ${selectedWord}</b><br><br><i>${meaning?.partOfSpeech || ""}</i><br><br>${definition}<br><br><button onclick='document.getElementById("popup").style.display="none"'>Close</button>`;
+        })
+        .catch(() => {
+            popup.innerHTML = "⚠️ Network error. Check your connection.<br><br><button onclick='document.getElementById(\"popup\").style.display=\"none\"'>Close</button>";
+        });
+};
+
+// ---------- BOOKMARKS ----------
+document.getElementById("addBookmarkBtn").onclick = () => {
+    const loc = rendition.currentLocation();
+    if (!loc) return;
+    const cfi = loc.start.cfi;
+    let data = JSON.parse(localStorage.getItem(currentBookKey) || "[]");
+    if (!data.includes(cfi)) {
+        data.push(cfi);
+        localStorage.setItem(currentBookKey, JSON.stringify(data));
+        updateBookmarkPanel();
+        showPopup("✅ Bookmark added!");
+    } else {
+        showPopup("📌 Already bookmarked");
+    }
+};
+document.getElementById("bookmarkPanelBtn").onclick = () => {
+    togglePanel("bookmarkPanel");
+    updateBookmarkPanel();
+};
+function updateBookmarkPanel() {
+    const content = document.getElementById("bookmarkContent");
+    content.innerHTML = "";
+    let data = JSON.parse(localStorage.getItem(currentBookKey) || "[]");
+    if (data.length === 0) {
+        content.innerHTML = "<p>📭 No bookmarks yet.<br><br>Tap <b>🔖 Add</b> while reading to save your place.</p>";
+        return;
+    }
+    data.forEach((cfi, i) => {
+        const row = document.createElement("div");
+        row.className = "item";
+        row.innerHTML = `<span>🔖 Bookmark ${i + 1}</span><button onclick="deleteBookmark('${cfi}')">✕</button>`;
+        row.querySelector("span").onclick = () => { rendition.display(cfi); togglePanel("bookmarkPanel"); };
+        content.appendChild(row);
+    });
+}
+function deleteBookmark(cfi) {
+    let data = JSON.parse(localStorage.getItem(currentBookKey) || "[]");
+    data = data.filter(b => b !== cfi);
+    localStorage.setItem(currentBookKey, JSON.stringify(data));
+    updateBookmarkPanel();
+}
+
+// ---------- POPUP HELPER ----------
+function showPopup(msg) {
+    const popup = document.getElementById("popup");
+    popup.innerHTML = msg + `<br><br><button onclick="document.getElementById('popup').style.display='none'">OK</button>`;
+    popup.style.display = "block";
+    setTimeout(() => { if(popup.style.display !== 'none') popup.style.display = 'none'; }, 3000);
+}
+
+// ── PWA: Service Worker Registration ─────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('✅ SW registered:', reg.scope))
+      .catch(err => console.warn('⚠️ SW failed:', err));
+  });
+}
+
+// ── PWA: BeforeInstallPrompt (for better UX) ─────────────────────
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  console.log('💡 PWA install prompt available');
+});
+</script>
+</body>
+</html>
