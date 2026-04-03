@@ -1,6 +1,6 @@
 {
-  "name": "PDFStudio™",
-  "short_name": "PDFStudio",
+  "name": "pdfSwan™",
+  "short_name": "pdfSwan",
   "description": "Professional PDF editor: merge, split, rotate, extract pages. Works offline.",
   "start_url": "./index.html",
   "display": "standalone",
