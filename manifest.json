@@ -1,12 +1,12 @@
 {
-  "name": "epubReaderPro™",
-  "short_name": "epubReader",
-  "description": "Read EPUB books offline with search, bookmarks, themes & dictionary",
+  "name": "PDFStudio™",
+  "short_name": "PDFStudio",
+  "description": "Professional PDF editor: merge, split, rotate, extract pages. Works offline.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f4f4f4",
-  "theme_color": "#2563eb",
-  "orientation": "portrait-primary",
+  "background_color": "#131318",
+  "theme_color": "#7c6af7",
+  "orientation": "any",
   "scope": "./",
   "icons": [
     {
@@ -34,8 +34,8 @@
       "purpose": "maskable"
     }
   ],
-  "screenshots": [],
-  "categories": ["books", "education", "utilities"],
+  "categories": ["productivity", "utilities", "books"],
   "lang": "en-US",
-  "dir": "ltr"
+  "dir": "ltr",
+  "prefer_related_applications": false
 }
